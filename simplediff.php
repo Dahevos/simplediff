@@ -39,16 +39,91 @@ function diff($old, $new){
 		diff(array_slice($old, $omax + $maxlen), array_slice($new, $nmax + $maxlen)));
 }
 
-function htmlDiff($old, $new){
-	$ret = '';
-	$diff = diff(explode(' ', $old), explode(' ', $new));
-	foreach($diff as $k){
-		if(is_array($k))
-			$ret .= (!empty($k['d'])?"<del>".implode(' ',$k['d'])."</del> ":'').
-				(!empty($k['i'])?"<ins>".implode(' ',$k['i'])."</ins> ":'');
-		else $ret .= $k . ' ';
-	}
-	return $ret;
+
+/*
+    Cette fonction produit une chaine suivant le format : 
+    (\d+)(d\([^()]*\))?(i\([^()]*\))?
+    example : 
+    $old = Salut je suis français
+    $new = Bonjour je suis chinois
+    produit : 
+    0d(Salut)i(Bonjour)3d(français)i(chinois)
+    la position est relative à la chaine FINALE (CORRIGE)
+
+    diff renvoie un array avec soit une chaine = pas de modif, soit un array avec la valeur a delete (d) ou/et la valeur à insert (i)
+*/
+function encodeHtmlDiff($old, $new){
+
+		$diff = diff(explode(' ', $old), explode(' ', $new));
+        $modif2save = "";
+        $pos = 0;
+
+		foreach($diff as $k){
+			if(is_array($k)) {
+                if (!empty($k['d']) || !empty($k['i'])) // il y a suppression ou insertion, on écrit la pos
+                    $modif2save .= "$pos";
+                if (!empty($k['d'])) {
+                    $modif2save .= "d(" . implode(' ',$k['d']) . ")"; // on écrit la mot a delete. On increm pas car le mot supprimé sera absent
+                                                                      // de la chaine finale, donc il faut pas avancé !
+                }
+                if (!empty($k['i'])) {
+                    $modif2save .= "i(" . implode(' ',$k['i']) . ")"; // on écrit le mot à insert, et on avance
+                    $pos += sizeof($k['i']);
+                }
+                    
+            }
+            else { 
+		        $pos++; // peu importe le mot, on avance
+            }
+		}
+    
+		return $modif2save;
+}
+
+
+/**
+    Transforme original suivant la valeur encode
+    Exemple : 
+    $original = Bonjour je suis chinois
+    $encode = 0d(Salut)i(Bonjour)3d(français)i(chinois)
+    produit : 
+    <del>Salut</del><ins>Bonjour</ins> je suis <del>français</del><ins>chinois</ins> 
+*/
+
+function decodeHtmlDiff($original, $encode) {
+
+    $newString = explode(" ",$original); /* chaine à modifier */
+    preg_match_all('/(\d+)(d\([^()]*\))?(i\([^()]*\))?/', $encode, $data, PREG_SET_ORDER);
+
+    $data = array_reverse($data); // on reverse le tableau, car les insertions/suppression vont modifier la taille de la chaine finale.
+                                  // obligé donc de partir de la fin.
+
+    foreach($data as $val) {
+        /* on recupère la position et la chaine à inserer */
+        $pos = $val[1];
+        $toInsert = "";
+        $flag = 0;
+        if (isset($val[2]) && $val[2] != "" && $val[2][0] == 'd') {
+            $toInsert .= "<del>".substr($val[2], 2, strlen($val[2])-3)."</del> ";
+            $flag--;
+        }
+        if (isset($val[3]) && $val[3] != "" && $val[3][0] == 'i') {
+            $toInsert .= " <ins>".substr($val[3], 2, strlen($val[3])-3)."</ins>";
+            $flag++;
+        }
+        
+        if ($flag == -1) { // juste une suppression
+            array_splice ($newString, $pos, 1, explode(" ",$toInsert . $newString[$pos]) );
+        } else if ($flag == 0) { // une suppression et une insertion
+            array_splice ($newString, $pos, sizeof(explode(" ", $val[3])), explode(" ",$toInsert) );
+        }else { // une insertion
+            array_splice ($newString, $pos, sizeof(explode(" ", $val[3])), explode(" ", $toInsert));
+        }
+
+    } 
+
+    return implode(" ", $newString);
+
 }
 
 ?>
