@@ -1,58 +1,106 @@
 <?php
 
+/* Paul's Simple Diff Algorithm v 0.1
+(C) Paul Butler 2007 <http://www.paulbutler.org/>
+May be used and distributed under the zlib/libpng license.
+This code is intended for learning purposes; it was written with short
+code taking priority over performance. It could be used in a practical
+application, but there are a few ways it could be optimized.
+Given two arrays, the function diff will return an array of the changes.
+I won't describe the format of the array, but it will be obvious
+if you use print_r() on the result of a diff on some test data.
+htmlDiff is a wrapper for the diff command, it takes two strings and
+returns the differences in HTML. The tags used are <ins> and <del>,
+which can easily be styled with CSS. */	
+
+
+
 /*
-	Paul's Simple Diff Algorithm v 0.1
-	(C) Paul Butler 2007 <http://www.paulbutler.org/>
-	May be used and distributed under the zlib/libpng license.
-	
-	This code is intended for learning purposes; it was written with short
-	code taking priority over performance. It could be used in a practical
-	application, but there are a few ways it could be optimized.
-	
-	Given two arrays, the function diff will return an array of the changes.
-	I won't describe the format of the array, but it will be obvious
-	if you use print_r() on the result of a diff on some test data.
-	
-	htmlDiff is a wrapper for the diff command, it takes two strings and
-	returns the differences in HTML. The tags used are <ins> and <del>,
-	which can easily be styled with CSS.  
+* diff : compute an array with the difference between two text
+*
+* var  : $old represent the original sentence
+*        $new represent the new sentence
+*
+* return : an array with the modification
+*
 */
 
 function diff($old, $new){
-	$maxlen = 0;
-	foreach($old as $oindex => $ovalue){
-		$nkeys = array_keys($new, $ovalue);
-		foreach($nkeys as $nindex){
-			$matrix[$oindex][$nindex] = isset($matrix[$oindex - 1][$nindex - 1]) ?
-				$matrix[$oindex - 1][$nindex - 1] + 1 : 1;
-			if($matrix[$oindex][$nindex] > $maxlen){
-				$maxlen = $matrix[$oindex][$nindex];
-				$omax = $oindex + 1 - $maxlen;
-				$nmax = $nindex + 1 - $maxlen;
+		$matrix = array();
+		$maxlen = 0;
+		foreach($old as $oindex => $ovalue){
+			$nkeys = array_keys($new, $ovalue);
+			foreach($nkeys as $nindex){
+				$matrix[$oindex][$nindex] = isset($matrix[$oindex - 1][$nindex - 1]) ? $matrix[$oindex - 1][$nindex - 1] + 1 : 1;
+				
+				if($matrix[$oindex][$nindex] > $maxlen){
+					$maxlen = $matrix[$oindex][$nindex];
+					$omax = $oindex + 1 - $maxlen;
+					$nmax = $nindex + 1 - $maxlen;
+				}
+
 			}
-		}	
+
+		}
+
+		
+		if($maxlen == 0)
+            return array(array('d'=>$old, 'i'=>$new));
+       
+
+		return array_merge(diff(array_slice($old, 0, $omax), array_slice($new, 0, $nmax)),array_slice($new, $nmax, $maxlen),diff(array_slice($old, $omax + $maxlen), array_slice($new, $nmax + $maxlen)));
+
 	}
-	if($maxlen == 0) return array(array('d'=>$old, 'i'=>$new));
-	return array_merge(
-		diff(array_slice($old, 0, $omax), array_slice($new, 0, $nmax)),
-		array_slice($new, $nmax, $maxlen),
-		diff(array_slice($old, $omax + $maxlen), array_slice($new, $nmax + $maxlen)));
-}
+
 
 
 /*
-    Cette fonction produit une chaine suivant le format : 
-    (\d+)(d\([^()]*\))?(i\([^()]*\))?
-    example : 
-    $old = Salut je suis français
-    $new = Bonjour je suis chinois
-    produit : 
-    0d(Salut)i(Bonjour)3d(français)i(chinois)
-    la position est relative à la chaine FINALE (CORRIGE)
-
-    diff renvoie un array avec soit une chaine = pas de modif, soit un array avec la valeur a delete (d) ou/et la valeur à insert (i)
+* htmlDiff : compute a string with html style to show the differences between two sentence
+*
+* var  : $old represent the original sentence
+*        $new represent the new sentence
+*
+* return : a string modified with css style
+*
 */
-function encodeHtmlDiff($old, $new){
+
+function htmlDiff($old, $new){
+
+
+		$ret = '';
+		$diff = diff(explode(' ', $old), explode(' ', $new));
+		foreach($diff as $k){
+			
+			if(is_array($k))
+                $ret .= (!empty($k['d'])?"<del STYLE=\"background-color:#FF6347;\" >".implode(' ',$k['d'])."</del> " : '') . (!empty($k['i'])?"<ins STYLE=\"background-color:#9ACD32;\">".implode(' ',$k['i'])."</ins> ":
+			''); 
+            else 
+                $ret .= $k . ' ';
+		}
+
+		return $ret;
+	}
+
+
+
+
+
+/*
+* patch_make : compute a string - a patch - to apply in order to retrieve the new sentence from the old one.
+*
+* var  : $old represent the original sentence
+*        $new represent the new sentence
+*
+* return : a string which follow the following regex : (\d+)(d\([^()]*\))?(i\([^()]*\))?
+*
+* example : 
+*    $old = Salut je suis français
+*    $new = Bonjour je suis chinois
+*    produce : 
+*    0d(Salut)i(Bonjour)3d(français)i(chinois)
+*
+*/
+function patch_make($old, $new){
 
 		$diff = diff(explode(' ', $old), explode(' ', $new));
         $modif2save = "";
@@ -60,20 +108,20 @@ function encodeHtmlDiff($old, $new){
 
 		foreach($diff as $k){
 			if(is_array($k)) {
-                if (!empty($k['d']) || !empty($k['i'])) // il y a suppression ou insertion, on écrit la pos
+                if (!empty($k['d']) || !empty($k['i'])) // we have deletion or insertion : we write the pos
                     $modif2save .= "$pos";
                 if (!empty($k['d'])) {
-                    $modif2save .= "d(" . implode(' ',$k['d']) . ")"; // on écrit la mot a delete. On increm pas car le mot supprimé sera absent
-                                                                      // de la chaine finale, donc il faut pas avancé !
+                    $modif2save .= "d(" . implode(' ',$k['d']) . ")"; // a deletion : we have to increase the position
+                    $pos += sizeof($k['d']);
                 }
                 if (!empty($k['i'])) {
-                    $modif2save .= "i(" . implode(' ',$k['i']) . ")"; // on écrit le mot à insert, et on avance
-                    $pos += sizeof($k['i']);
+                    $modif2save .= "i(" . implode(' ',$k['i']) . ")"; // an insertion : do not need to increase because old string does not have
+                                                                      // the inserted value
                 }
                     
             }
             else { 
-		        $pos++; // peu importe le mot, on avance
+		        $pos++; // no insertion, no deletion, we increase pos
             }
 		}
     
@@ -81,19 +129,28 @@ function encodeHtmlDiff($old, $new){
 }
 
 
-/**
-    Transforme original suivant la valeur encode
-    Exemple : 
-    $original = Bonjour je suis chinois
-    $encode = 0d(Salut)i(Bonjour)3d(français)i(chinois)
-    produit : 
-    <del>Salut</del><ins>Bonjour</ins> je suis <del>français</del><ins>chinois</ins> 
-*/
 
-function decodeHtmlDiff($original, $encode) {
+
+/*
+* patch_apply : apply a patch to an old sentence in order to retrieve the new one
+*
+* var  : $patch represent the patch
+*        $original represent the old sentence
+*
+* return : a string - the new sentence retrieved
+*
+* example : 
+*    $patch = 0d(Salut)i(Bonjour)3d(français)i(chinois)
+*    $original = Salut je suis français
+*    produce : 
+*    Bonjour je suis chinois
+*
+*/
+function patch_apply($patch, $original) {
 
     $newString = explode(" ",$original); /* chaine à modifier */
-    preg_match_all('/(\d+)(d\([^()]*\))?(i\([^()]*\))?/', $encode, $data, PREG_SET_ORDER);
+    $newString = array_values(array_filter($newString));
+    preg_match_all('/(\d+)(d\([^()]*\))?(i\([^()]*\))?/', $patch, $data, PREG_SET_ORDER);
 
     $data = array_reverse($data); // on reverse le tableau, car les insertions/suppression vont modifier la taille de la chaine finale.
                                   // obligé donc de partir de la fin.
@@ -101,29 +158,22 @@ function decodeHtmlDiff($original, $encode) {
     foreach($data as $val) {
         /* on recupère la position et la chaine à inserer */
         $pos = $val[1];
-        $toInsert = "";
-        $flag = 0;
         if (isset($val[2]) && $val[2] != "" && $val[2][0] == 'd') {
-            $toInsert .= "<del>".substr($val[2], 2, strlen($val[2])-3)."</del> ";
-            $flag--;
+            for($i=$pos; $i < $pos+ sizeof(explode(" ",$val[2])); $i++)
+                $newString[$i] = "";
         }
         if (isset($val[3]) && $val[3] != "" && $val[3][0] == 'i') {
-            $toInsert .= " <ins>".substr($val[3], 2, strlen($val[3])-3)."</ins>";
-            $flag++;
+            if (isset($newString[$pos]))
+                $newString[$pos] = substr($val[3], 2, strlen($val[3])-3) . " " . $newString[$pos];
+            else
+                array_push($newString, substr($val[3], 2, strlen($val[3])-3));
         }
-        
-        if ($flag == -1) { // juste une suppression
-            array_splice ($newString, $pos, 1, explode(" ",$toInsert . $newString[$pos]) );
-        } else if ($flag == 0) { // une suppression et une insertion
-            array_splice ($newString, $pos, sizeof(explode(" ", $val[3])), explode(" ",$toInsert) );
-        }else { // une insertion
-            array_splice ($newString, $pos, sizeof(explode(" ", $val[3])), explode(" ", $toInsert));
-        }
-
     } 
 
     return implode(" ", $newString);
 
 }
+
+
 
 ?>
