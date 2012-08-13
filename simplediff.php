@@ -40,8 +40,11 @@ function diff($old, $new){
 				}
 
 			}
+            		unset($matrix[$oindex - 1]);
 
 		}
+        	unset($matrix);
+        	unset($nkeys);
 
 		
 		if($maxlen == 0)
